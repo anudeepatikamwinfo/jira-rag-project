@@ -1,5 +1,22 @@
+import re
 import requests
 from vector_search import search
+
+
+def get_section(text, section):
+
+    pattern = rf"{section}:\s*(.*?)(?=\n\n[A-Z][A-Za-z ]*:|\Z)"
+
+    match = re.search(
+        pattern,
+        text,
+        re.DOTALL
+    )
+
+    if match:
+        return match.group(1).strip()
+
+    return "Not Available"
 
 
 def build_context(tickets):
@@ -35,6 +52,7 @@ Status:
 
     return context
 
+
 def ask_jira(question):
 
     tickets = search(question)
@@ -50,8 +68,11 @@ def ask_jira(question):
 
     if not tickets:
         return {
-            "answer": "No relevant Jira tickets found.",
-            "tickets": []
+            "issueSummary": "No relevant Jira tickets found.",
+            "rootCause": "Not Available",
+            "fixImplemented": "Not Available",
+            "workaround": "Not Available",
+            "relevantTickets": []
         }
 
     context = build_context(tickets)
@@ -61,24 +82,19 @@ You are a senior Jira support analyst.
 
 Analyze the Jira tickets and answer in EXACTLY this format.
 
-Issue Summary
--------------
+Issue Summary:
 <summary>
 
-Root Cause
-----------
+Root Cause:
 <root cause>
 
-Fix Implemented
----------------
+Fix Implemented:
 <fix implemented>
 
-Relevant Jira Tickets
----------------------
+Relevant Jira Tickets:
 <ticket numbers>
 
-Workaround
-----------
+Workaround:
 <workaround if available>
 
 Question:
@@ -106,7 +122,63 @@ Rules:
 
     answer = response.json()["response"]
 
+    print("\n========== RAW RESPONSE ==========")
+    print(answer)
+    print("==================================")
+
+    issue_summary = get_section(
+        answer,
+        "Issue Summary"
+    )
+
+    root_cause = get_section(
+        answer,
+        "Root Cause"
+    )
+
+    fix_implemented = get_section(
+        answer,
+        "Fix Implemented"
+    )
+
+    workaround = get_section(
+        answer,
+        "Workaround"
+    )
+
+    relevant_tickets_text = get_section(
+        answer,
+        "Relevant Jira Tickets"
+    )
+
+    relevant_tickets = []
+
+    for ticket in tickets:
+
+        if ticket["ticketNumber"] in relevant_tickets_text:
+
+            relevant_tickets.append({
+                "ticketNumber": ticket["ticketNumber"],
+                "summary": ticket["summary"],
+                "score": ticket["score"]
+            })
+
+    # Fallback if model does not mention tickets
+    if not relevant_tickets:
+
+        relevant_tickets = [
+            {
+                "ticketNumber": t["ticketNumber"],
+                "summary": t["summary"],
+                "score": t["score"]
+            }
+            for t in tickets
+        ]
+
     return {
-        "answer": answer,
-        "ticketCount": len(tickets)
+        "issueSummary": issue_summary,
+        "rootCause": root_cause,
+        "fixImplemented": fix_implemented,
+        "workaround": workaround,
+        "relevantTickets": relevant_tickets
     }
