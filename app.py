@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import List
 
 from rag_answer import ask_jira
 
@@ -8,23 +9,26 @@ app = FastAPI(
     version="1.0"
 )
 
+
 class QuestionRequest(BaseModel):
     question: str
 
 
-@app.get("/")
-def home():
-
-    return {
-        "message": "Jira RAG API Running"
-    }
+class Ticket(BaseModel):
+    ticketNumber: str
+    score: float
+    summary: str
 
 
-@app.post("/ask")
+class JiraResponse(BaseModel):
+    issueSummary: str
+    rootCause: str
+    fixImplemented: str
+    workaround: str
+    relevantTickets: List[Ticket]
+
+
+@app.post("/ask", response_model=JiraResponse)
 def ask(request: QuestionRequest):
 
-    result = ask_jira(
-        request.question
-    )
-
-    return result
+    return ask_jira(request.question)
